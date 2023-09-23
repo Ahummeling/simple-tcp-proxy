@@ -1,6 +1,3 @@
-/*
- * $Id: simple-tcp-proxy.c,v 1.11 2006/08/03 20:30:48 wessels Exp $
- */
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -33,15 +30,13 @@
 
 char client_hostname[64];
 
-void
-cleanup(int sig)
+void cleanup(int sig)
 {
     syslog(LOG_NOTICE, "Cleaning up...");
     exit(0);
 }
 
-void
-sigreap(int sig)
+void sigreap(int sig)
 {
     int status;
     pid_t p;
@@ -50,33 +45,32 @@ sigreap(int sig)
     /* no debugging in signal handler! */
 }
 
-void
-set_nonblock(int fd)
+void set_nonblock(int fd)
 {
-    int fl;
-    int x;
+    int fl, x;
     fl = fcntl(fd, F_GETFL, 0);
+
     if (fl < 0) {
-	syslog(LOG_ERR, "fcntl F_GETFL: FD %d: %s", fd, strerror(errno));
-	exit(1);
+	    syslog(LOG_ERR, "fcntl F_GETFL: FD %d: %s", fd, strerror(errno));
+	    exit(1);
     }
+
     x = fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+
     if (x < 0) {
-	syslog(LOG_ERR, "fcntl F_SETFL: FD %d: %s", fd, strerror(errno));
-	exit(1);
+	    syslog(LOG_ERR, "fcntl F_SETFL: FD %d: %s", fd, strerror(errno));
+	    exit(1);
     }
 }
 
 
-int
-create_server_sock(char *addr, int port)
+int create_server_sock(char *addr, int port)
 {
     int addrlen, s, on = 1, x;
     static struct sockaddr_in client_addr;
 
     s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s < 0)
-	err(1, "socket");
+    if (s < 0) err(1, "socket");
 
     addrlen = sizeof(client_addr);
     memset(&client_addr, '\0', addrlen);
@@ -85,8 +79,7 @@ create_server_sock(char *addr, int port)
     client_addr.sin_port = htons(port);
     setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, 4);
     x = bind(s, (struct sockaddr *) &client_addr, addrlen);
-    if (x < 0)
-	err(1, "bind %s:%d", addr, port);
+    if (x < 0) err(1, "bind %s:%d", addr, port);
 
     x = listen(s, 5);
     if (x < 0)
@@ -96,8 +89,7 @@ create_server_sock(char *addr, int port)
     return s;
 }
 
-int
-open_remote_host(char *host, int port)
+int open_remote_host(char *host, int port)
 {
     struct sockaddr_in rem_addr;
     int len, s, x;
@@ -122,32 +114,33 @@ open_remote_host(char *host, int port)
     memcpy(&rem_addr.sin_addr, H->h_addr, H->h_length);
     rem_addr.sin_port = htons(port);
     x = connect(s, (struct sockaddr *) &rem_addr, len);
+
     if (x < 0) {
-	close(s);
-	return x;
+	    close(s);
+	    return x;
     }
+
     set_nonblock(s);
+
     return s;
 }
 
-int
-get_hinfo_from_sockaddr(struct sockaddr_in addr, int len, char *fqdn)
+int get_hinfo_from_sockaddr(struct sockaddr_in addr, int len, char *fqdn)
 {
     struct hostent *hostinfo;
 
     hostinfo = gethostbyaddr((char *) &addr.sin_addr.s_addr, len, AF_INET);
     if (!hostinfo) {
-	sprintf(fqdn, "%s", inet_ntoa(addr.sin_addr));
-	return 0;
+	    sprintf(fqdn, "%s", inet_ntoa(addr.sin_addr));
+	    return 0;
     }
-    if (hostinfo && fqdn)
+    if (fqdn)
 	sprintf(fqdn, "%s [%s]", hostinfo->h_name, inet_ntoa(addr.sin_addr));
     return 0;
 }
 
 
-int
-wait_for_connection(int s)
+int wait_for_connection(int s)
 {
     static int newsock;
     static socklen_t len;
@@ -157,33 +150,29 @@ wait_for_connection(int s)
     syslog(LOG_INFO, "calling accept FD %d", s);
     newsock = accept(s, (struct sockaddr *) &peer, &len);
     /* dump_sockaddr (peer, len); */
-    if (newsock < 0) {
-	if (errno != EINTR) {
-	    syslog(LOG_NOTICE, "accept FD %d: %s", s, strerror(errno));
-	    return -1;
-	}
+    if (newsock < 0 && errno != EINTR) {
+        syslog(LOG_NOTICE, "accept FD %d: %s", s, strerror(errno));
+        return -1;
     }
     get_hinfo_from_sockaddr(peer, len, client_hostname);
     set_nonblock(newsock);
+
     return (newsock);
 }
 
-int
-mywrite(int fd, char *buf, int *len)
+int mywrite(int fd, char *buf, int *len)
 {
 	int x = write(fd, buf, *len);
-	if (x < 0)
-		return x;
-	if (x == 0)
-		return x;
-	if (x != *len)
-		memmove(buf, buf+x, (*len)-x);
+	if (x < 0) return x;
+	if (x == 0) return x;
+	if (x != *len) memmove(buf, buf+x, (*len)-x);
+
 	*len -= x;
+
 	return x;
 }
 
-void
-service_client(int cfd, int sfd)
+void service_client(int cfd, int sfd)
 {
     int maxfd;
     char *sbuf;
@@ -199,65 +188,64 @@ service_client(int cfd, int sfd)
     maxfd++;
 
     while (1) {
-	struct timeval to;
-	if (cbo) {
-		if (mywrite(sfd, cbuf, &cbo) < 0 && errno != EWOULDBLOCK) {
-			syslog(LOG_ERR, "write %d: %s", sfd, strerror(errno));
-				exit(1);
-		}
-	}
-	if (sbo) {
-		if (mywrite(cfd, sbuf, &sbo) < 0 && errno != EWOULDBLOCK) {
-			syslog(LOG_ERR, "write %d: %s", cfd, strerror(errno));
-				exit(1);
-		}
-	}
-	FD_ZERO(&R);
-	if (cbo < BUF_SIZE)
-		FD_SET(cfd, &R);
-	if (sbo < BUF_SIZE)
-		FD_SET(sfd, &R);
-	to.tv_sec = 0;
-	to.tv_usec = 1000;
-	x = select(maxfd+1, &R, 0, 0, &to);
-	if (x > 0) {
-	    if (FD_ISSET(cfd, &R)) {
-		n = read(cfd, cbuf+cbo, BUF_SIZE-cbo);
-		syslog(LOG_INFO, "read %d bytes from CLIENT (%d)", n, cfd);
-		if (n > 0) {
-		    cbo += n;
-		} else {
-		    close(cfd);
-		    close(sfd);
-		    syslog(LOG_INFO, "exiting");
-		    _exit(0);
-		}
-	    }
-	    if (FD_ISSET(sfd, &R)) {
-		n = read(sfd, sbuf+sbo, BUF_SIZE-sbo);
-		syslog(LOG_INFO, "read %d bytes from SERVER (%d)", n, sfd);
-		if (n > 0) {
-		    sbo += n;
-		} else {
-		    close(sfd);
-		    close(cfd);
-		    syslog(LOG_INFO, "exiting");
-		    _exit(0);
-		}
-	    }
-	} else if (x < 0 && errno != EINTR) {
-	    syslog(LOG_NOTICE, "select: %s", strerror(errno));
-	    close(sfd);
-	    close(cfd);
-	    syslog(LOG_NOTICE, "exiting");
-	    _exit(0);
-	}
+        struct timeval to;
+        if (cbo) {
+            if (mywrite(sfd, cbuf, &cbo) < 0 && errno != EWOULDBLOCK) {
+                syslog(LOG_ERR, "write %d: %s", sfd, strerror(errno));
+                    exit(1);
+            }
+        }
+        if (sbo) {
+            if (mywrite(cfd, sbuf, &sbo) < 0 && errno != EWOULDBLOCK) {
+                syslog(LOG_ERR, "write %d: %s", cfd, strerror(errno));
+                    exit(1);
+            }
+        }
+
+        FD_ZERO(&R);
+
+        if (cbo < BUF_SIZE) FD_SET(cfd, &R);
+        if (sbo < BUF_SIZE) FD_SET(sfd, &R);
+        to.tv_sec = 0;
+        to.tv_usec = 1000;
+        x = select(maxfd+1, &R, 0, 0, &to);
+        if (x > 0) {
+            if (FD_ISSET(cfd, &R)) {
+                n = read(cfd, cbuf+cbo, BUF_SIZE-cbo);
+                syslog(LOG_INFO, "read %d bytes from CLIENT (%d)", n, cfd);
+                if (n > 0) {
+                    cbo += n;
+                } else {
+                    close(cfd);
+                    close(sfd);
+                    syslog(LOG_INFO, "exiting");
+                    _exit(0);
+                }
+            }
+            if (FD_ISSET(sfd, &R)) {
+                n = read(sfd, sbuf+sbo, BUF_SIZE-sbo);
+                syslog(LOG_INFO, "read %d bytes from SERVER (%d)", n, sfd);
+                if (n > 0) {
+                    sbo += n;
+                } else {
+                    close(sfd);
+                    close(cfd);
+                    syslog(LOG_INFO, "exiting");
+                    _exit(0);
+                }
+            }
+        } else if (x < 0 && errno != EINTR) {
+            syslog(LOG_NOTICE, "select: %s", strerror(errno));
+            close(sfd);
+            close(cfd);
+            syslog(LOG_NOTICE, "exiting");
+            _exit(0);
+        }
     }
 }
 
 
-int
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
     char *localaddr = NULL;
     int localport = -1;
@@ -268,8 +256,8 @@ main(int argc, char *argv[])
     int master_sock = -1;
 
     if (5 != argc) {
-	fprintf(stderr, "usage: %s laddr lport rhost rport\n", argv[0]);
-	exit(1);
+	    fprintf(stderr, "usage: %s laddr lport rhost rport\n", argv[0]);
+	    exit(1);
     }
 
     localaddr = strdup(argv[1]);
@@ -289,25 +277,24 @@ main(int argc, char *argv[])
 
     master_sock = create_server_sock(localaddr, localport);
     for (;;) {
-	if ((client = wait_for_connection(master_sock)) < 0)
-	    continue;
-	if ((server = open_remote_host(remoteaddr, remoteport)) < 0) {
-	    close(client);
-	    client = -1;
-	    continue;
-	}
-	if (0 == fork()) {
-	    /* child */
-	    syslog(LOG_NOTICE, "connection from %s fd=%d", client_hostname, client);
-	    syslog(LOG_INFO, "connected to %s:%d fd=%d", remoteaddr, remoteport, server);
-	    close(master_sock);
-	    service_client(client, server);
-	    abort();
-	}
-	close(client);
-	client = -1;
-	close(server);
-	server = -1;
-    }
+	if ((client = wait_for_connection(master_sock)) < 0) continue;
+        if ((server = open_remote_host(remoteaddr, remoteport)) < 0) {
+            close(client);
+            client = -1;
+            continue;
+        }
+        if (0 == fork()) {
+            /* child */
+            syslog(LOG_NOTICE, "connection from %s fd=%d", client_hostname, client);
+            syslog(LOG_INFO, "connected to %s:%d fd=%d", remoteaddr, remoteport, server);
+            close(master_sock);
+            service_client(client, server);
+            abort();
+        }
 
+        close(client);
+        client = -1;
+        close(server);
+        server = -1;
+    }
 }
